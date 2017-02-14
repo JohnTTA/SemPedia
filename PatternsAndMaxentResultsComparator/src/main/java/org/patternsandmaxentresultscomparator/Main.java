@@ -84,6 +84,7 @@ public class Main {
 						Sentence sentence = new Sentence(startOffset, endOffset, id, "");
 					}
 				}else if(elementName.equals("Feature")){
+					
 					while(!reader.nextEvent().isStartElement()){
 						
 					}
