@@ -2,29 +2,31 @@ package org.mlhypernymextractor.core;
 
 import gate.util.GateException;
 import gate.util.Out;
+import it.uniroma1.lcl.jlt.util.Files;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.Reader;
+import java.io.ObjectOutputStream;
+import java.io.Writer;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.events.StartElement;
+import javax.xml.stream.events.XMLEvent;
 
-import org.annolab.tt4j.TreeTaggerException;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.InputSource;
+import org.mlhypernymextractor.utils.UsefulMethods;
 
 public class Main {
 
@@ -38,14 +40,16 @@ public class Main {
 	public static String pairsOfTermsFileFolderURL = corpusFolderURL
 			+ "\\pairs of terms";
 	public static ArrayList<GateResultFile> gateResultFiles = new ArrayList<>();
-	// public static BabelNetAPI babel = new BabelNetAPI();
-	public static BabelNetAPI babel;
+	 public static BabelNetAPI babel = new BabelNetAPI();
+//	public static BabelNetAPI babel;
 	public static boolean multipleTermsCombination = false;
 	// final static Logger logger = Logger.getLogger(Main.class);
 	public static boolean ttgAllSentences = false;
+	public static boolean withFeatures = false;
+	public static final int windowLength = 3;
 	// les constantes
-	public static final int POSITIF = 0;
-	public static final int NEGATIF = 1;
+	public static final int POSITIF = 1;
+	public static final int NEGATIF = 0;
 	public static final int OTHER = 2;
 
 	/**
@@ -61,7 +65,6 @@ public class Main {
 		// -Xmx1024m
 
 		if (args.length == 4) {
-			System.out.println("entred");
 			if (args[0].equals("-generate-multiple-term-combination")) {
 				multipleTermsCombination = true;
 				File corpusFolder = new File((String) args[1]);
@@ -71,9 +74,10 @@ public class Main {
 				ANNIE_HOME = ANNIE_HOME_FOLDER.toPath().toString();
 				File termsListDefFolder = new File((String) args[3]);
 				termsListDefFolderURL = termsListDefFolder.toPath().toString();
-				System.out.println(termsListDefFolderURL);
+//				System.out.println(termsListDefFolderURL);
 				xmlResultsFolderURL = corpusFolderURL + "/results";
 				pairsOfTermsFileFolderURL = corpusFolderURL + "/pairs_of_terms";
+				withFeatures  = true;
 			}
 		} else if (args.length == 3) {
 			if (((String) args[0]).equals("-ttg-examples")) {
@@ -82,14 +86,14 @@ public class Main {
 				}
 				File file = new File((String) args[2]);
 				Main.pairsOfTermsFileFolderURL = file.getParent();
-				GateResultFile gateResultFile = createPairsFromFile(file);
+				GateResultFile gateResultFile = createPairsFromPairsFile(file);
 				gateResultFile.calculatePairFrequency();
 				Out.prln("TreeTagging all sentences");
-				try {
-					gateResultFile.treeTagg(Main.ttgAllSentences);
-				} catch (TreeTaggerException e) {
-					e.printStackTrace();
-				}
+//				try {
+//					gateResultFile.treeTagg(Main.ttgAllSentences);
+//				} catch (TreeTaggerException e) {
+//					e.printStackTrace();
+//				}
 				return;
 			} else {
 				File corpusFolder = new File((String) args[0]);
@@ -100,28 +104,26 @@ public class Main {
 				termsListDefFolderURL = termsListDefFolder.toPath().toString();
 				xmlResultsFolderURL = corpusFolderURL + "/results";
 				pairsOfTermsFileFolderURL = corpusFolderURL + "/pairs_of_terms";
+				return;
 			}
 		} else if (args.length == 2) {
 			for (int i = 0; i < args.length; i++) {
 				if (((String) args[i]).equals("-validation")) {
 					File pairsFile = new File((String) args[i + 1]);
 					Main.pairsOfTermsFileFolderURL = pairsFile.getParent();
-					GateResultFile gateResultFile = createPairsFromFile(pairsFile);
+					GateResultFile gateResultFile = createPairsFromPairsFile(pairsFile);
 					gateResultFile.validateWithBabelNet();
 					return;
 				} else if (((String) args[i]).equals("-ttg-examples")) {
 					File file = new File((String) args[i + 1]);
 					Main.pairsOfTermsFileFolderURL = file.getParent();
+					Out.prln("Creating objects from BalbelNet Resulte File");
 					GateResultFile gateResultFile = createExamplesFromBebelNetResultFile(file);
+					Out.prln("Calculating pairs frequency");
 					gateResultFile.calculatePairFrequency();
-					Out.pr("Constructing final examples");
+					Out.prln("Constructing final examples");
 					gateResultFile.constructFinalNegatifExamples(1);
-					try {
-						gateResultFile.treeTagg(Main.ttgAllSentences);
-					} catch (TreeTaggerException e) {
-						e.printStackTrace();
-					}
-					gateResultFile.saveTTGResult();
+					gateResultFile.createTrainingSetFile();
 					return;
 				} else if (((String) args[i]).equals("-parse")) {
 					File file = new File((String) args[i + 1]);
@@ -141,22 +143,22 @@ public class Main {
 						}
 					}
 
-					
 					boolean allThreadsAreTerminated = false;
 
 					long startTime = System.currentTimeMillis();
-					long waitTime = startTime+(long)600000;
+					long waitTime = startTime + (long) 600000;
 					Calendar calendar = Calendar.getInstance();
 					calendar.setTimeInMillis(startTime);
-					
+
 					Out.prln("All threads are launched at : "
 							+ calendar.get(Calendar.DAY_OF_MONTH) + " "
 							+ calendar.get(Calendar.HOUR_OF_DAY) + ":"
 							+ calendar.get(Calendar.MINUTE));
 					while (!allThreadsAreTerminated) {
 						long iTime = System.currentTimeMillis();
-						int isItTimeToCheckThreads = new Long(waitTime).compareTo(new Long(iTime));
-						if (isItTimeToCheckThreads<0) {
+						int isItTimeToCheckThreads = new Long(waitTime)
+								.compareTo(new Long(iTime));
+						if (isItTimeToCheckThreads < 0) {
 							int running = 0;
 							for (Thread thread : threads) {
 								if (thread.isAlive()) {
@@ -164,16 +166,17 @@ public class Main {
 									Out.prln(thread.getName() + " is running");
 								}
 							}
-							if(running == 0){
+							if (running == 0) {
 								allThreadsAreTerminated = true;
-							}else{
+							} else {
 								startTime = System.currentTimeMillis();
 								calendar.setTimeInMillis(startTime);
-								Out.prln(running+" threads are checked at : "
-										+ calendar.get(Calendar.DAY_OF_MONTH) + " "
-										+ calendar.get(Calendar.HOUR_OF_DAY) + ":"
-										+ calendar.get(Calendar.MINUTE));
-								waitTime = startTime+(long)600000;
+								Out.prln(running + " threads are checked at : "
+										+ calendar.get(Calendar.DAY_OF_MONTH)
+										+ " "
+										+ calendar.get(Calendar.HOUR_OF_DAY)
+										+ ":" + calendar.get(Calendar.MINUTE));
+								waitTime = startTime + (long) 600000;
 								running = 0;
 							}
 						}
@@ -207,7 +210,14 @@ public class Main {
 				GateResultFile f = new GateResultFile(out.toURI().toURL());
 				Out.prln("parsing Gate XML file : "
 						+ f.getGateResultFileURL().toURI().getPath());
-				parseGateXml(out, f.getSentences());
+				try {
+					f.parse();
+//					parseGateXml(out, f.getSentences());
+					
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 				Out.prln("Gate XML file parsed"
 						+ f.getGateResultFileURL().toURI().getPath());
 				int nbTerm = 0;
@@ -228,37 +238,38 @@ public class Main {
 			gateResultFile.extractPairs(multipleTermsCombination);
 			Out.prln("Pairs of terms generated from "
 					+ gateResultFile.getGateResultFileURL().toURI().getPath());
-			gateResultFile.printPairsOfTerms();
+//			gateResultFile.printPairsOfTerms();
 			Out.prln("Saving pairs of terms");
 			gateResultFile.savePairsInFile();
-			// calculate frequency for each pair
 			gateResultFile.calculatePairFrequency();
-
-			// Out.prln("Validating with Babelnet");
-			// gateResultFile.validateWithBabelNet();
 		}
 
 	}
 
+	/*
+	 * this method load GateResultFile from a babelnet result file
+	 * pairs file is in this format : Term1\tTerm2\tClass\tsentence
+	 */
 	private static GateResultFile createExamplesFromBebelNetResultFile(File file)
 			throws IOException {
 		GateResultFile res = new GateResultFile(file.toURI().toURL());
-		BufferedReader in = new BufferedReader(new InputStreamReader(
-				new FileInputStream(file), "UTF8"));
+		BufferedReader in = UsefulMethods.openUTF8BufferedReader(file);
+		
+//		File featuresFile = new File(file.getParent()+"/"+Files.getFileNameWithoutExtension(file.getName())+"_features.txt");
+//		featuresFile.createNewFile();
+//		File pairsFile = new File(file.getParent()+"/"+Files.getFileNameWithoutExtension(file.getName())+"_features_file_to_compare.txt");
+//		pairsFile.createNewFile();
+//		Writer featuresWriter = UsefulMethods.openUTF8OutputWriter(featuresFile);
+//		Writer pairsWriter = UsefulMethods.openUTF8OutputWriter(pairsFile);
+		
 		String str;
 		while ((str = in.readLine()) != null) {
-			String[] line = str.split(" => ");
-			String termsString = line[0];
-			String[] terms;
-
-			if (termsString.contains("IS-A")) {
-				terms = termsString.split(" IS-A ");
-			} else
-				terms = termsString.split(", ");
-
-			String[] st = line[1].split(" ; ");
-			String typeChar = st[0];
-			String sentenceString = st[1];
+			String[] line = str.split("\t", 4);
+			String[] terms = {line[0], line[1]};
+			
+			String typeChar = line[2];
+			String sentenceString = line[3];
+			
 			Term term1, term2;
 			Sentence sentence;
 			if (terms[0] != null && terms[1] != null && typeChar != null
@@ -276,6 +287,12 @@ public class Main {
 				else
 					p.setType(OTHER);
 				res.addSentence(sentence);
+//				p.createFeatures();
+//				featuresWriter.append(p.getFeatures().toString()+"\t"+p.getType());
+//				featuresWriter.append("\n");
+//				pairsWriter.append(p.toString());
+//				pairsWriter.append("\n");
+				
 				res.addPair(p);
 				switch (p.getType()) {
 				case POSITIF:
@@ -289,21 +306,26 @@ public class Main {
 				}
 			}
 		}
-		in.close();
+//		UsefulMethods.closeUTF8OutputWriter(featuresWriter);
+//		UsefulMethods.closeUTF8OutputWriter(pairsWriter);
+		UsefulMethods.closeUTF8BufferedReader(in);
 		return res;
 	}
 
-	private static GateResultFile createPairsFromFile(File pairsFile)
+	/*
+	 * this method load GateResultFile from a pairs file
+	 * pairs file is in this format : Term1\tTerm2\t\sentence
+	 */
+	public static GateResultFile createPairsFromPairsFile(File pairsFile)
 			throws IOException {
 		GateResultFile res = new GateResultFile(pairsFile.toURI().toURL());
 		BufferedReader in = new BufferedReader(new InputStreamReader(
 				new FileInputStream(pairsFile), "UTF8"));
 		String str;
 		while ((str = in.readLine()) != null) {
-			String[] line = str.split(", ", 3);
+			String[] line = str.split("\t", 3);
 			Term term1, term2;
 			Sentence sentence;
-			System.out.println(line[0] + ", " + line[1] + ", " + line[2]);
 			if (line[0] != null && line[1] != null && line[2] != null) {
 				term1 = new Term(-1, -1, line[0], false);
 				term2 = new Term(-1, -1, line[1], false);
@@ -325,126 +347,60 @@ public class Main {
 		return res;
 	}
 
-	public static void parseGateXml(File xmlGate, ArrayList<Sentence> sentences) {
+	@Deprecated
+	public static void parseGateXml(File xmlGate, ArrayList<Sentence> sentences) throws Exception {
+		new Exception("This method is remplaced by GateResultFile.parse()");
 		try {
-			Out.prln("Starting parsing for "+xmlGate.getCanonicalPath());
-			InputStream inputStream = new FileInputStream(xmlGate);
-			Reader reader = new InputStreamReader(inputStream, "UTF-8");
-			InputSource is = new InputSource(reader);
-			is.setEncoding("UTF-8");
+			XMLInputFactory factory = XMLInputFactory.newInstance();
 
-			DocumentBuilderFactory dbFactory = DocumentBuilderFactory
-					.newInstance();
-			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
-			Document doc = dBuilder.parse(is);
-
-			doc.getDocumentElement().normalize();
-
-			// get all annotations
-			NodeList domAnnotations = doc.getElementsByTagName("Annotation");
-
-			ArrayList<Annotation> annotations = new ArrayList<>();
-			// r�cup�rer le text
-			NodeList textWithNodes = doc.getElementsByTagName("TextWithNodes");
-			String text = textWithNodes.item(0).getTextContent();
-
-			for (int temp = 0; temp < domAnnotations.getLength(); temp++) {
-				Node nNode = domAnnotations.item(temp);
-				if (((Element) nNode).getAttribute("Type").equals("Sentence")) {
-					// parcourir les sentences
-					int startOffset = Integer.valueOf(((Element) nNode)
-							.getAttribute("StartNode"));
-					int endOffset = Integer.valueOf(((Element) nNode)
-							.getAttribute("EndNode"));
-					int id = Integer.valueOf(((Element) nNode)
-							.getAttribute("Id"));
-					String value = text.substring(startOffset, endOffset);
-					value = value.replaceAll("\n", "").replaceAll("\r", "");
-					Sentence s = new Sentence(startOffset, endOffset, id, value);
-					annotations.add(s);
-
-				} else if (((Element) nNode).getAttribute("Type").equals(
-						"Lookup")) {
-					// parcourir les termes
-					NodeList values = ((Element) nNode)
-							.getElementsByTagName("Value");
-					if (values.getLength() == 1) {
-						Node valueNode = values.item(0);
-						if (valueNode.getTextContent().equals("terme")) {
-							int startOffset = Integer.valueOf(((Element) nNode)
-									.getAttribute("StartNode"));
-							int endOffset = Integer.valueOf(((Element) nNode)
-									.getAttribute("EndNode"));
-							String value = text.substring(startOffset,
-									endOffset);
-							value = value.replaceAll("\n", "").replaceAll("\r",
-									"");
-							if (!value.matches("\\d+")) {
-								Term t = new Term(startOffset, endOffset,
-										value, false);
-								annotations.add(t);
-							}
-						} else if (valueNode.getTextContent()
-								.equals("mot_vide")) {
-							int startOffset = Integer.valueOf(((Element) nNode)
-									.getAttribute("StartNode"));
-							int endOffset = Integer.valueOf(((Element) nNode)
-									.getAttribute("EndNode"));
-							String value = text.substring(startOffset,
-									endOffset);
-							value = value.replaceAll("\n", "").replaceAll("\r",
-									"");
-
-							if (!value.matches("\\d+")) {
-								Term t = new Term(startOffset, endOffset,
-										value, true);
-								annotations.add(t);
-							}
+			XMLEventReader reader = factory
+					.createXMLEventReader(new FileReader(xmlGate));
+			String originalText = null;
+			
+			ObjectOutputStream oosSentences =  new ObjectOutputStream(new FileOutputStream("temp/sentences.ser")) ;
+			
+			while (reader.hasNext()) {
+				XMLEvent event = reader.nextEvent();
+				int type = event.getEventType();
+				switch (type) {
+				case XMLStreamReader.START_ELEMENT:
+					StartElement startElement = (StartElement) event;
+					String elementName = startElement.getName().toString();
+					//c'est les balises <Annotation> qui nous intéresse
+					if (elementName.equals("Annotation")) {
+						//on récupére d'abord les phrases
+						if (startElement.getAttributeByName(new QName("Type"))
+								.getValue().equals("Sentence")) {
+							int startOffset = Integer.valueOf(startElement
+									.getAttributeByName(new QName("StartNode"))
+									.getValue());
+							int endOffset = Integer.valueOf(startElement
+									.getAttributeByName(new QName("EndNode"))
+									.getValue());
+							int id = Integer.valueOf(startElement
+									.getAttributeByName(new QName("Id"))
+									.getValue());
+							String value = originalText.substring(startOffset, endOffset);
+							Sentence sentence = new Sentence(startOffset,
+									endOffset, id, value);
+							oosSentences.writeObject(sentence);
+							sentence = null;
+						}
+					} else if (elementName.equals("Feature")) {
+						UsefulMethods.staxSkipToTheNextStartElement(reader);
+						if (reader.getElementText().equals(
+								"Original_document_content_on_load")) {
+							//we get the original text
+							UsefulMethods.staxSkipToTheNextStartElement(reader);
+							originalText = reader.getElementText();
 						}
 					}
-
-				} else {
-					continue;
+					break;
+				default:
+					break;
 				}
 			}
 
-			Out.prln("--Linking terms to their sentences for : "+xmlGate.getCanonicalPath());
-			// relier les termes aux sentences correspondantes
-			for (Annotation annotation : annotations) {
-				if (annotation.isSentence()) {
-					int sentenceStartOffset = annotation.getStartOffset();
-					int sentenceEndOffset = annotation.getEndOffset();
-					for (Annotation term : annotations) {
-						if (!term.isSentence()) {
-							if (term.getStartOffset() >= sentenceStartOffset
-									&& term.getEndOffset() <= sentenceEndOffset) {
-								((Sentence) annotation).addTerm((Term) term);
-							}
-						}
-					}
-					sentences.add((Sentence) annotation);
-				}
-			}
-			// supprimer les mots vides
-			Out.prln("--Deleting empty tokens for : "+xmlGate.getCanonicalPath());
-			for (Sentence sentence : sentences) {
-				ArrayList<Term> temp = new ArrayList<>(sentence.getTerms());
-				for (Term motVide : temp) {
-					if (motVide.isMotVide()) {
-						for (Term term : temp) {
-							if (motVide.equals(term)) {
-								// supprimer les deux termes de la phrase
-								sentence.removeTerm(motVide);
-								sentence.removeTerm(term);
-							}
-						}
-					}
-
-				}
-
-			}
-
-			inputStream.close();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

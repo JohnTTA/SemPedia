@@ -1,12 +1,22 @@
 package org.mlhypernymextractor.core;
-public class Pair {
+
+import java.io.Serializable;
+
+import org.mlhypernymextracor.learning.features.Features;
+
+public class Pair implements Serializable{
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1744079464774488348L;
 	private Term term1;
 	private Term term2;
 	private int freq = 0;
 	private int type;
 	
 	private Sentence sentence;
-
+	private Features features = null;
+	
 	public Pair(Term t1, Term t2) {
 		this.term1 = t1;
 		this.term2 = t2;
@@ -61,6 +71,14 @@ public class Pair {
 
 	
 	
+	public Features getFeatures() {
+		return features;
+	}
+
+	public void setFeatures(Features features) {
+		this.features = features;
+	}
+
 	@Override
 	public boolean equals(Object p) {
 		return (this.term1.getValue().equals(((Pair) p).getTerm1().getValue()) && this.term2
@@ -81,5 +99,15 @@ public class Pair {
 		default:
 			return "";
 		}
+	}
+
+	public void createFeatures() {
+		this.features = new Features(this, Main.windowLength);
+	}
+	
+	@Override
+	public String toString(){
+		return this.term1.getValue()+"\t"+this.term2.getValue()+"\t"+this.sentence.getValue()+"\t"+this.type;
+		
 	}
 }

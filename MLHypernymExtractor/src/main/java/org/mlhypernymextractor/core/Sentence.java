@@ -1,13 +1,20 @@
 package org.mlhypernymextractor.core;
 import java.util.ArrayList;
 
+import org.mlhypernymextracor.learning.features.Features;
+
 
 public class Sentence extends Annotation {
 	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 4495199444707765379L;
 	private int id;
 	private ArrayList<Term> terms = null;
 	private String value;
 	private String ttgValue;
+	private Features features;
 	
 	public Sentence(int a, int b, int id, String v) {
 		super(a,b);
@@ -66,4 +73,24 @@ public class Sentence extends Annotation {
 		this.value = value;
 	}
 
+	public Features getFeatures() {
+		return features;
+	}
+
+	public void setFeatures(Features features) {
+		this.features = features;
+	}
+
+	public String printTerms() {
+		String res = "";
+		for (Term term : this.terms) {
+			res += term.getValue()+"("+term.startOffset+","+term.endOffset+")"+", ";
+		}
+		return res;
+	}
+
+	@Override
+	public String toString(){
+		return this.value + this.terms.toString();
+	}
 }
