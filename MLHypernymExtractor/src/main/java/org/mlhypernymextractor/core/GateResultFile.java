@@ -1,25 +1,35 @@
 package org.mlhypernymextractor.core;
 
+import gate.AnnotationSet;
+import gate.Document;
+import gate.Factory;
+import gate.Gate;
+import gate.util.GateException;
+import gate.util.OffsetComparator;
 import gate.util.Out;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-import org.annolab.tt4j.TreeTaggerException;
-import org.annolab.tt4j.TreeTaggerWrapper;
 import org.apache.commons.collections.ListUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.mlhypernymextractor.threading.RemoveMotsVidesFromTermAnnotations;
+import org.mlhypernymextractor.utils.UsefulMethods;
 
 public class GateResultFile {
 
@@ -132,29 +142,55 @@ public class GateResultFile {
 
 	public void extractPairs(boolean multipleTermsCombination) {
 		if (multipleTermsCombination) {
-			this.generateMultipleTermsCombination();
+			this.generateMultipleTermsCombination(Main.withFeatures);
 		} else
 			this.generateRandomlyTermsPairs();
 
 	}
 
-	private void generateMultipleTermsCombination() {
-		Out.prln("Generating pairs for : "+this.gateResultFileURL.getPath());
+	private void generateMultipleTermsCombination(boolean withFeatures) {
+		Out.prln("Generating pairs for : " + this.gateResultFileURL.getPath());
+		Writer featuresWriter = null;
+		if(withFeatures){
+			File featuresFile = new File(Main.pairsOfTermsFileFolderURL+"/features.txt");
+			try {
+				featuresFile.createNewFile();
+				featuresWriter = UsefulMethods.openUTF8OutputWriter(featuresFile);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
 		for (Sentence s : this.sentences) {
 			int i = 0;
 			while (i < s.getTerms().size() - 1) {
 				for (Term termB : s.getTerms().subList(i + 1,
 						s.getTerms().size())) {
 					Term termA = s.getTerms().get(i);
-					if (!termA.getValue().equals(termB.getValue())) {
+					if (!termA.getValue().toLowerCase().equals(termB.getValue().toLowerCase())) {
 						Pair pair = new Pair(termA, termB);
+						if(withFeatures){
+							pair.createFeatures();
+							try {
+								featuresWriter.append(pair.getFeatures().toString());
+								featuresWriter.append("\n");
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+						}
 						pairsOfTerms.add(pair);
 					}
 				}
 				i++;
 			}
 		}
-		Out.prln("Generating pairs finished for : "+this.gateResultFileURL.getPath());
+		Out.prln("Generating pairs finished for : "
+				+ this.gateResultFileURL.getPath());
+		if(featuresWriter != null)
+			try {
+				UsefulMethods.closeUTF8OutputWriter(featuresWriter);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 	}
 
 	private void generateRandomlyTermsPairs() {
@@ -170,9 +206,9 @@ public class GateResultFile {
 				while (rdmVariable1 == rdmVariable2
 						|| s.getTerms()
 								.get(rdmVariable1)
-								.getValue()
+								.getValue().toLowerCase()
 								.equals(s.getTerms().get(rdmVariable2)
-										.getValue()) || iteration != limit) {
+										.getValue().toLowerCase()) || iteration != limit) {
 					iteration++;
 					rdmVariable2 = rdm.nextInt(s.getTerms().size());
 				}
@@ -180,9 +216,9 @@ public class GateResultFile {
 				if (rdmVariable1 == rdmVariable2
 						|| s.getTerms()
 								.get(rdmVariable1)
-								.getValue()
+								.getValue().toLowerCase()
 								.equals(s.getTerms().get(rdmVariable2)
-										.getValue())) {
+										.getValue().toLowerCase())) {
 					continue;
 				} else {
 					Term termA = s.getTerms().get(rdmVariable1);
@@ -216,7 +252,7 @@ public class GateResultFile {
 		File file = new File(resultFolder.getAbsolutePath()
 				+ '/'
 				+ FilenameUtils.getBaseName(this.getGateResultFileURL()
-						.getPath()) + ".txt");
+						.getPath()) + "_pairs.txt");
 		file.createNewFile();
 		Out.prln("--Creation pairs of terms document result for : "
 				+ file.toURI().getPath());
@@ -231,7 +267,7 @@ public class GateResultFile {
 				sentence = this.pairsOfTerms.get(i).getSentence().getValue();
 			else
 				sentence = "Not from the same sentece : ERROR ";
-			out.append(term1 + ", " + term2 + ", " + sentence);
+			out.append(term1 + "\t" + term2 + "\t" + sentence);
 			if (i != this.pairsOfTerms.size() - 1)
 				out.append("\n");
 		}
@@ -279,8 +315,8 @@ public class GateResultFile {
 
 		if (valid) {
 			pair.setType(Main.POSITIF);
-			out.append(pair.getTerm2().getValue() + " IS-A "
-					+ pair.getTerm1().getValue() + " => " + "+" + " ; "
+			out.append(pair.getTerm2().getValue() + "\t"
+					+ pair.getTerm1().getValue() + "\t" + "+" + "\t"
 					+ pair.getSentence().getValue());
 
 			out.append("\n");
@@ -294,8 +330,8 @@ public class GateResultFile {
 		}
 		if (valid) {
 			pair.setType(Main.POSITIF);
-			out.append(pair.getTerm1().getValue() + " IS-A "
-					+ pair.getTerm2().getValue() + " => " + "+" + " ; "
+			out.append(pair.getTerm1().getValue() + "\t"
+					+ pair.getTerm2().getValue() + "\t" + "+" + "\t"
 					+ pair.getSentence().getValue());
 			out.append("\n");
 
@@ -306,14 +342,14 @@ public class GateResultFile {
 
 			if ((boolean) parameters[1]) {
 				pair.setType(Main.NEGATIF);
-				out.append(pair.getTerm1().getValue() + ", "
-						+ pair.getTerm2().getValue() + " => " + "-" + " ; "
+				out.append(pair.getTerm1().getValue() + "\t"
+						+ pair.getTerm2().getValue() + "\t" + "-" + "\t"
 						+ pair.getSentence().getValue());
 				out.append("\n");
 			} else {
 				pair.setType(Main.OTHER);
-				out.append(pair.getTerm1().getValue() + ", "
-						+ pair.getTerm2().getValue() + " => " + "?" + " ; "
+				out.append(pair.getTerm1().getValue() + "\t"
+						+ pair.getTerm2().getValue() + "\t" + "?" + "\t"
 						+ pair.getSentence().getValue());
 				out.append("\n");
 			}
@@ -393,7 +429,8 @@ public class GateResultFile {
 	}
 
 	public void constructFinalNegatifExamples(int threshold) {
-		int nmbExamples = this.finalPositifExamples.size();
+//		int nmbExamples = this.finalPositifExamples.size();
+		int nmbExamples = 1500;
 		int counter = 0;
 		for (Pair negatifPair : this.negatifExamples) {
 			if (counter != nmbExamples) {
@@ -405,103 +442,83 @@ public class GateResultFile {
 		}
 	}
 
-	public void treeTagg(boolean ttgAllSentences) throws IOException,
-			TreeTaggerException {
-		System.out.println("tree-tagging file");
-		if (ttgAllSentences) {
-			this.ttgAllSenteces();
-			System.out.println("boolean");
-		} else
-			this.ttgPositifAndNegatifExamples();
+//	public void treeTagg(boolean ttgAllSentences) throws IOException,
+//			TreeTaggerException {
+//		System.out.println("tree-tagging file");
+//		if (ttgAllSentences) {
+//			this.ttgAllSenteces();
+//			System.out.println("boolean");
+//		} else
+//			this.ttgPositifAndNegatifExamples();
+//	}
 
-	}
+//	private void ttgAllSenteces() throws IOException, TreeTaggerException {
+//		System.setProperty("treetagger.home", "TreeTagger2");
+//		System.out.println("tree-tagging begins");
+//		for (Pair p : this.getPairsOfTerms()) {
+//			TreeTaggerWrapper<String> tt = new TreeTaggerWrapper<String>();
+//			tt.setModel("TreeTagger2/model/french.par");
+//			tt.setHandler(new MyTokenHandler());
+//			List<String> tokens = tokenize(p.getSentence().getValue());
+//			tt.process(tokens);
+//			p.getSentence().setTtgValue(
+//					((MyTokenHandler) tt.getHandler()).getTTGString());
+//			tt.destroy();
+//		}
+//		System.out.println("tree-tagging finished");
+//
+//		File file = new File(Main.pairsOfTermsFileFolderURL
+//				+ "/ttg-all-result.txt");
+//		file.createNewFile();
+//		File filePair = new File(Main.pairsOfTermsFileFolderURL
+//				+ "/ttg-all-pairs-result.txt");
+//		filePair.createNewFile();
+//		Out.prln("Tree-Tagger Result in : " + file.toURI().getPath());
+//
+//		Writer out = new BufferedWriter(new OutputStreamWriter(
+//				new FileOutputStream(file), "UTF-8"));
+//		Writer outPair = new BufferedWriter(new OutputStreamWriter(
+//				new FileOutputStream(filePair), "UTF-8"));
+//
+//		for (Pair pair : this.getPairsOfTerms()) {
+//			String term1 = pair.getTerm1().getValue();
+//			String term2 = pair.getTerm2().getValue();
+//			String sentenceTTG = pair.getSentence().getTtgValue();
+//			out.append(sentenceTTG + "\t" + "?");
+//			out.append("\n");
+//			outPair.append(term1 + ", " + term2 + "; "
+//					+ pair.getSentence().getValue() + "\t" + "?");
+//			outPair.append("\n");
+//		}
+//		out.close();
+//		outPair.close();
+//	}
 
-	private void ttgAllSenteces() throws IOException, TreeTaggerException {
-		System.setProperty("treetagger.home", "TreeTagger2");
-		System.out.println("tree-tagging begins");
-		for (Pair p : this.getPairsOfTerms()) {
-			TreeTaggerWrapper<String> tt = new TreeTaggerWrapper<String>();
-			tt.setModel("TreeTagger2/model/french.par");
-			tt.setHandler(new MyTokenHandler());
-			List<String> tokens = tokenize(p.getSentence().getValue());
-			tt.process(tokens);
-			p.getSentence().setTtgValue(
-					((MyTokenHandler) tt.getHandler()).getTTGString());
-			tt.destroy();
-		}
-		System.out.println("tree-tagging finished");
-
-		File file = new File(Main.pairsOfTermsFileFolderURL
-				+ "/ttg-all-result.txt");
-		file.createNewFile();
-		File filePair = new File(Main.pairsOfTermsFileFolderURL
-				+ "/ttg-all-pairs-result.txt");
-		filePair.createNewFile();
-		Out.prln("Tree-Tagger Result in : " + file.toURI().getPath());
-
-		Writer out = new BufferedWriter(new OutputStreamWriter(
-				new FileOutputStream(file), "UTF-8"));
-		Writer outPair = new BufferedWriter(new OutputStreamWriter(
-				new FileOutputStream(filePair), "UTF-8"));
-
-		for (Pair pair : this.getPairsOfTerms()) {
-			String term1 = pair.getTerm1().getValue();
-			String term2 = pair.getTerm2().getValue();
-			String sentenceTTG = pair.getSentence().getTtgValue();
-			out.append(sentenceTTG + "\t" + "?");
-			out.append("\n");
-			outPair.append(term1 + ", " + term2 + "; "
-					+ pair.getSentence().getValue() + "\t" + "?");
-			outPair.append("\n");
-		}
-		out.close();
-		outPair.close();
-	}
-
-	private void ttgPositifAndNegatifExamples() throws IOException,
-			TreeTaggerException {
-		System.setProperty("treetagger.home", "TreeTagger2");
-		for (Pair positifPair : this.finalPositifExamples) {
-			TreeTaggerWrapper<String> tt = new TreeTaggerWrapper<String>();
-			tt.setModel("TreeTagger2/model/french.par");
-			tt.setHandler(new MyTokenHandler());
-			List<String> tokens = tokenize(positifPair.getSentence().getValue());
-			tt.process(tokens);
-			positifPair.getSentence().setTtgValue(
-					((MyTokenHandler) tt.getHandler()).getTTGString());
-			tt.destroy();
-		}
-
-		for (Pair negatifPair : this.finalNegatifExamples) {
-			TreeTaggerWrapper<String> tt = new TreeTaggerWrapper<String>();
-			tt.setModel("TreeTagger2/model/french.par");
-			tt.setHandler(new MyTokenHandler());
-			List<String> tokens = tokenize(negatifPair.getSentence().getValue());
-			tt.process(tokens);
-			negatifPair.getSentence().setTtgValue(
-					((MyTokenHandler) tt.getHandler()).getTTGString());
-			tt.destroy();
-		}
-	}
-
-	public List<String> tokenize(final String aString) {
-		List<String> tokens = new ArrayList<String>();
-		BreakIterator bi = BreakIterator.getWordInstance();
-		bi.setText(aString);
-		int begin = bi.first();
-		int end;
-		for (end = bi.next(); end != BreakIterator.DONE; end = bi.next()) {
-			String t = aString.substring(begin, end);
-			if (t.trim().length() > 0) {
-				tokens.add(aString.substring(begin, end));
-			}
-			begin = end;
-		}
-		if (end != -1) {
-			tokens.add(aString.substring(end));
-		}
-		return tokens;
-	}
+//	private void ttgPositifAndNegatifExamples() throws IOException,
+//			TreeTaggerException {
+//		System.setProperty("treetagger.home", "TreeTagger2");
+//		for (Pair positifPair : this.finalPositifExamples) {
+//			TreeTaggerWrapper<String> tt = new TreeTaggerWrapper<String>();
+//			tt.setModel("TreeTagger2/model/french.par");
+//			tt.setHandler(new MyTokenHandler());
+//			List<String> tokens = tokenize(positifPair.getSentence().getValue());
+//			tt.process(tokens);
+//			positifPair.getSentence().setTtgValue(
+//					((MyTokenHandler) tt.getHandler()).getTTGString());
+//			tt.destroy();
+//		}
+//
+//		for (Pair negatifPair : this.finalNegatifExamples) {
+//			TreeTaggerWrapper<String> tt = new TreeTaggerWrapper<String>();
+//			tt.setModel("TreeTagger2/model/french.par");
+//			tt.setHandler(new MyTokenHandler());
+//			List<String> tokens = tokenize(negatifPair.getSentence().getValue());
+//			tt.process(tokens);
+//			negatifPair.getSentence().setTtgValue(
+//					((MyTokenHandler) tt.getHandler()).getTTGString());
+//			tt.destroy();
+//		}
+//	}
 
 	public void saveTTGResult() throws IOException {
 
@@ -543,4 +560,227 @@ public class GateResultFile {
 
 	}
 
+	@SuppressWarnings("unchecked")
+	public void parse() throws GateException, IOException,
+			ClassNotFoundException, InterruptedException {
+		try {
+			Gate.init();
+		} catch (GateException e) {
+			System.out.println(this.gateResultFileURL.toString());
+			e.printStackTrace();
+		}
+		
+		Document doc = Factory.newDocument(this.gateResultFileURL);
+		Out.prln("Gate initialized");
+		File tempFile = new File("temp/senteces.ser");
+		tempFile.createNewFile();
+		ObjectOutputStream oosSentences = new ObjectOutputStream(
+				new FileOutputStream(tempFile));
+
+		AnnotationSet sentenceGateAnnotations = doc.getAnnotations()
+				.get("Sentence");
+		Out.prln("--Parsing sentences");
+		ArrayList<Sentence> sentences = new ArrayList<>();
+		
+		ArrayList<gate.Annotation> sentenceAnnnotations = new ArrayList<>(sentenceGateAnnotations);
+		Collections.sort(sentenceAnnnotations, new OffsetComparator());
+		
+		for (gate.Annotation sentenceAnnotation : sentenceAnnnotations) {
+			int id = sentenceAnnotation.getId();
+			long startOffset = sentenceAnnotation.getStartNode().getOffset();
+			long endOffset = sentenceAnnotation.getEndNode().getOffset();
+			String value = doc
+					.getContent()
+					.toString()
+					.substring(new Long(startOffset).intValue(),
+							new Long(endOffset).intValue());
+			value = value.replaceAll("\n", "").replaceAll("\r", "").replaceAll("\t", " ");
+			sentences.add(new Sentence(new Long(startOffset).intValue(),
+					new Long(endOffset).intValue(), id, value));
+
+		}
+		oosSentences.writeObject(sentences);
+		sentences = null;
+
+		Out.prln("--Parsing terms");
+		AnnotationSet lookupAnnotations = doc.getAnnotations().get("Lookup");
+		ArrayList<gate.Annotation> termAnnotations = new ArrayList<>();
+		for (gate.Annotation lookupAnnotation : lookupAnnotations) {
+			String majorTypeValue = (String) lookupAnnotation.getFeatures()
+					.get("majorType");
+			if (majorTypeValue.equals("terme"))
+				termAnnotations.add(lookupAnnotation);
+		}
+
+		ArrayList<gate.Annotation> motvideAnnotations = new ArrayList<>();
+		for (gate.Annotation lookupAnnotation : lookupAnnotations) {
+			String majorTypeValue = (String) lookupAnnotation.getFeatures()
+					.get("majorType");
+			if (majorTypeValue.equals("mot_vide"))
+				motvideAnnotations.add(lookupAnnotation);
+		}
+		Out.prln("--Removing overlapped terms");
+		System.out.println("BEFOR = " + termAnnotations.size());
+//		RemoveOverlappedTerms
+//				.parallelDeleteOverlappedTermsAnnotations(termAnnotations);
+		System.out.println("AFTER = " + termAnnotations.size());
+
+		Out.prln("--Removing mots vides from terms");
+		RemoveMotsVidesFromTermAnnotations
+				.parallelDeleteMotsVidesFromTermAnnotations(termAnnotations,
+						motvideAnnotations);
+		Out.prln("--Mots vides deleted");
+		System.out.println("AFTER = " + termAnnotations.size());
+		InputStream sentenceCache = new FileInputStream(tempFile);
+		ObjectInputStream oisSentences = new ObjectInputStream(
+				new BufferedInputStream(sentenceCache));
+
+		sentences = (ArrayList<Sentence>) oisSentences.readObject();
+		Out.prln("--Linking terms to their sentences");
+		
+		// sauvegarde des resultats en XML
+				File resultFolder = new File(Main.pairsOfTermsFileFolderURL);
+				resultFolder.mkdir();
+
+				File file = new File(resultFolder.getAbsolutePath()
+						+ '/'
+						+ FilenameUtils.getBaseName(this.getGateResultFileURL()
+								.getPath()) + "_pairs.txt");
+				file.createNewFile();
+				Out.prln("--Creation pairs of terms document result for : "
+						+ file.toURI().getPath());
+				Writer out = new BufferedWriter(new OutputStreamWriter(
+						new FileOutputStream(file), "UTF-8"));
+				
+
+		Collections.sort(termAnnotations, new OffsetComparator());
+		int termsParsed = 0;
+		for (int i = 0; i < sentences.size(); i++) {
+			for (int j=termsParsed; j < termAnnotations.size(); j++) {
+				int termStartOffset = new Long(termAnnotations.get(j).getStartNode()
+						.getOffset()).intValue();
+				int termEndOffset = new Long(termAnnotations.get(j).getEndNode()
+						.getOffset()).intValue();
+				
+				if (termStartOffset >= sentences.get(i).getStartOffset()
+						&& termEndOffset <= sentences.get(i).getEndOffset()){
+					String value = doc.getContent().toString()
+							.substring(termStartOffset, termEndOffset);
+					value = value.replaceAll("\n", "").replaceAll("\r", "").replaceAll("\t", " ");
+					
+					if (!value.matches("\\d+")) {
+						Term term = new Term(termStartOffset, termEndOffset, value,
+								false);
+						sentences.get(i).addTerm(term);
+					}
+					
+				}else if(termStartOffset >= sentences.get(i).getEndOffset()){
+						Pair pair = extractPairs(sentences.get(i));
+						if(pair != null){
+							this.addPair(pair);
+							out.append(pair.getTerm1().getValue()+"\t"+pair.getTerm2().getValue()+"\t"+pair.getSentence().getValue());
+							out.append("\n");
+						}
+						termsParsed=j-1;
+						j = termAnnotations.size();
+				}
+			}
+		}
+		
+		
+//		for (Sentence sentence : sentences) {
+//			for (gate.Annotation termAnnotation : termAnnotations) {
+//				int termStartOffset = new Long(termAnnotation.getStartNode()
+//						.getOffset()).intValue();
+//				int termEndOffset = new Long(termAnnotation.getEndNode()
+//						.getOffset()).intValue();
+//				if (termStartOffset >= sentence.getStartOffset()
+//						&& termEndOffset <= sentence.getEndOffset()) {
+//					String value = doc.getContent().toString()
+//							.substring(termStartOffset, termEndOffset);
+//					Term term = new Term(termStartOffset, termEndOffset, value,
+//							false);
+//					sentence.addTerm(term);
+//				}
+//			}
+//		}
+		Out.prln("-- Pairs of terms document saved at : "
+				+ file.toURI().getPath());
+		out.flush();
+		out.close();
+		this.sentences = sentences;
+		oisSentences.close();
+		oosSentences.close();
+		tempFile.delete();
+		Out.prln("File parsed");
+	}
+
+	private Pair extractPairs(Sentence sentence) {
+			Random rdm = new Random();
+			if (sentence.getTerms().size() > 1) {
+				int rdmVariable1 = rdm.nextInt(sentence.getTerms().size());
+				int rdmVariable2 = rdm.nextInt(sentence.getTerms().size());
+				int distance = Math.abs(rdmVariable1-rdmVariable2);
+				// il faut pas avoir deux nombres al�atoires identiques
+				// ni deux termes identiques
+				int limit = sentence.getTerms().size() * sentence.getTerms().size();
+				int iteration = 0;
+				
+				while((rdmVariable1 == rdmVariable2 && iteration !=limit)|| (sentence.getTerms()
+						.get(rdmVariable1)
+						.getValue().toLowerCase()
+						.equals(sentence.getTerms().get(rdmVariable2)
+								.getValue().toLowerCase()) && iteration !=limit) || (distance >= 10 && iteration !=limit)){
+					iteration++;
+					rdmVariable2 = rdm.nextInt(sentence.getTerms().size());
+					distance = Math.abs(rdmVariable1-rdmVariable2);
+				}
+
+				if (rdmVariable1 == rdmVariable2
+						|| sentence.getTerms()
+								.get(rdmVariable1)
+								.getValue().toLowerCase()
+								.equals(sentence.getTerms().get(rdmVariable2)
+										.getValue().toLowerCase()) || distance >= 10) {
+					return null;
+				} else {
+					Term termA = sentence.getTerms().get(rdmVariable1);
+					Term termB = sentence.getTerms().get(rdmVariable2);
+					Pair pair = new Pair(termA, termB);
+					return pair;
+				}
+			} else{
+				return null;
+			}
+		
+	}
+
+	public void createTrainingSetFile() throws IOException{
+		File trainingSetFile = new File(Main.pairsOfTermsFileFolderURL+"/"+"training-set.txt");
+		File pairFile = new File(Main.pairsOfTermsFileFolderURL+"/"+"training-set-with-pairs.txt");
+		trainingSetFile.createNewFile();
+		pairFile.createNewFile();
+		Writer trainingSetOut = UsefulMethods.openUTF8OutputWriter(trainingSetFile);
+		Writer pairsOut = UsefulMethods.openUTF8OutputWriter(pairFile);
+		Out.prln("Creating training set in : "+trainingSetFile.getPath());
+		
+		for (int i = 0; i < 1500; i++) {
+			Pair p = this.finalPositifExamples.get(i);
+			p.createFeatures();
+			trainingSetOut.append(p.getFeatures().toString()+" "+p.getType());
+			trainingSetOut.append("\n");
+			pairsOut.append(p.getTerm1().getValue()+"\t"+p.getTerm2().getValue()+"\t"+p.getSentence().getValue()+"\t"+p.getType());
+			pairsOut.append("\n");
+		}
+		for (int i = 0; i < 1500; i++) {
+			Pair p = this.finalNegatifExamples.get(i);
+			p.createFeatures();
+			trainingSetOut.append(p.getFeatures().toString()+" "+p.getType());
+			trainingSetOut.append("\n");
+			pairsOut.append(p.getTerm1().getValue()+"\t"+p.getTerm2().getValue()+"\t"+p.getSentence().getValue()+"\t"+p.getType());
+			pairsOut.append("\n");
+		}
+		UsefulMethods.closeUTF8OutputWriter(trainingSetOut);
+		UsefulMethods.closeUTF8OutputWriter(pairsOut);
+	}
 }

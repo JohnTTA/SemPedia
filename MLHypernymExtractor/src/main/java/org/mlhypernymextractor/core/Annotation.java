@@ -1,7 +1,13 @@
 package org.mlhypernymextractor.core;
 
-public class Annotation {
+import java.io.Serializable;
 
+public class Annotation implements Serializable{
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 2795857095621648264L;
 	protected int startOffset;
 	protected int endOffset;
 	protected boolean isSentence = false;

@@ -1,6 +1,7 @@
 package org.mlhypernymextractor;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -11,10 +12,11 @@ import org.mlhypernymextractor.core.GateResultFile;
 import org.mlhypernymextractor.core.Pair;
 import org.mlhypernymextractor.core.Sentence;
 import org.mlhypernymextractor.core.Term;
+import org.mlhypernymextractor.utils.UsefulMethods;
 
 public class TestUnit {
 
-	@Test
+//	@Test
 	public void generateMultipleTermsCombinationTest()
 			throws MalformedURLException {
 		Sentence sentence1 = new Sentence(-1, -1, 0,
@@ -48,10 +50,10 @@ public class TestUnit {
 				-1,
 				1,
 				"La R�publique de Mac�doine, Ancienne R�publique Yougoslave de Mac�doine (ARYM ou FYROM en anglais), ou simplement Mac�doine est un �tat d�Europe du Sud, situ� dans la p�ninsule balkanique, ind�pendant depuis 1991.");
-		Term term21 = new Term(-1, -1, "R�publique", false);
-		Term term22 = new Term(-1, -1, "Mac�doine", false);
+		Term term21 = new Term(-1, -1, "République", false);
+		Term term22 = new Term(-1, -1, "Macédoine", false);
 		Term term23 = new Term(-1, -1, "Yougoslave", false);
-		Term term24 = new Term(-1, -1, "Mac�doine", false);
+		Term term24 = new Term(-1, -1, "Macédoine", false);
 		Term term25 = new Term(-1, -1, "Europe du Sud", false);
 		Term term26 = new Term(-1, -1, "balkanique", false);
 
@@ -110,24 +112,39 @@ public class TestUnit {
 		}
 
 	}
+
+	// @Test
+	// public void myTest() throws Exception {
+	// Gate.init();
+	// File file = new File(
+	// "C:\\Users\\ghamnia\\dump 2016\\homonymie\\corpus\\demo\\results\\Babel_0000A.xml");
+	// GateResultFile test = new GateResultFile(file.toURI().toURL());
+	// test.parse();
+	// }
+	
 	
 	@Test
-	public void myTest(){
-		long time = System.currentTimeMillis();
-		System.out.println(time);
-		long time2 = time+(long)10000;
-		boolean test = false;
-		while(!test){
-			long current = System.currentTimeMillis();
-			int finish = new Long(time2).compareTo(new Long(current));
-			test = finish<0;
-			
-		}
-		System.out.println(time2 == time2);
-		System.out.println("time 1 = " + time);
-		System.out.println("time 2 = " + time2);
-		System.out.println("time 2 = " + (long)(time+(long)2));
-		
+	public void featuresTest() throws Exception {
+		Sentence sentence = new Sentence(-1, -1, 0,
+//				"Porte est un nom commun et un nom propre.");
+				"un nom propre.");
+		Term term2 = new Term(-1, -1, "un nom", false);
+		Term term1 = new Term(-1, -1, "propre.", false);
+		sentence.addTerm(term2);
+		sentence.addTerm(term1);
+		Pair pair = new Pair(term2, term1);
+		pair.createFeatures();
+		System.out.println(pair.getFeatures());
 	}
-
+	
+//	@Test 
+	public void getTermIndexInSentenceTokensTest(){
+		String sentence = "Jéraume est une personne agréble.";
+		String[] sentenceTokens = UsefulMethods.tokenize(sentence);
+		
+		String term1 = "est une personne";
+		
+		int[] index = UsefulMethods.getTermIndexInSentenceTokens(term1, sentenceTokens);
+		System.out.println("alloo : "+ index[0]+ " "+ index[1]);
+	}
 }

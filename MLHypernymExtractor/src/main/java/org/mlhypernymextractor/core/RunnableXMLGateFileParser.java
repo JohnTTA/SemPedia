@@ -1,5 +1,6 @@
 package org.mlhypernymextractor.core;
 
+import gate.util.GateException;
 import gate.util.Out;
 
 import java.io.File;
@@ -24,7 +25,7 @@ public class RunnableXMLGateFileParser implements Runnable{
 		Out.prln("Parsing Gate XML file : "
 				+ f.getGateResultFileURL().toURI()
 						.getPath());
-		Main.parseGateXml(xmlGateFile, f.getSentences());
+		f.parse();
 		Out.prln("Gate XML file parsed "
 				+ f.getGateResultFileURL().toURI()
 						.getPath());
@@ -35,14 +36,14 @@ public class RunnableXMLGateFileParser implements Runnable{
 		}
 		
 
-		f.extractPairs(Main.multipleTermsCombination);
+//		f.extractPairs(Main.multipleTermsCombination);
 		Out.prln(nbTerm
 				+ " terms extracted from "
 				+ f.getGateResultFileURL().toURI()
 						.getPath());
 //		f.printPairsOfTerms();
-		Out.prln("Saving pairs of terms for : "+xmlGateFile.getCanonicalFile());
-		f.savePairsInFile();
+//		Out.prln("Saving pairs of terms for : "+xmlGateFile.getCanonicalFile());
+//		f.savePairsInFile();
 		// calculate frequency for each pair
 		Out.prln("Calculating pair frequency for : "+xmlGateFile.getCanonicalFile());
 		f.calculatePairFrequency();
@@ -51,6 +52,15 @@ public class RunnableXMLGateFileParser implements Runnable{
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (URISyntaxException e) {
+			e.printStackTrace();
+		} catch (GateException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		

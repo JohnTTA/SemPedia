@@ -1,6 +1,10 @@
 package org.mlhypernymextractor.core;
 public class Term extends Annotation {
 
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -4884850656474212269L;
 	private String value;
 	private Sentence sentence;
 	private boolean isMotVide = false;
@@ -39,6 +43,11 @@ public class Term extends Annotation {
 	public boolean equals(Term t) {
 		return this.getStartOffset() == t.getStartOffset()
 				&& this.getEndOffset() == t.getEndOffset();
+	}
+	
+	@Override
+	public String toString(){
+		return this.value;
 	}
 
 }
