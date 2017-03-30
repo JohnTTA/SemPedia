@@ -63,7 +63,7 @@ public class UsefulMethods {
 	}
 	
 	public static int[] getTermIndexInSentenceTokens(String term,
-			String[] sentenceTokens) {
+			String[] sentenceTokens, int termNbr) {
 		int[] res = new int[2];
 		String termTokens[] = UsefulMethods.tokenize(term);
 		int startIndex = 0;
@@ -71,10 +71,19 @@ public class UsefulMethods {
 		for (int i = 0; i < sentenceTokens.length; i++) {
 			if (sentenceTokens[i].equals(termTokens[0])) {
 				int j = 1;
+//				if(termNbr == 1)
+//					sentenceTokens[i]="Terme1";
+//				else
+//					sentenceTokens[i]="Terme2";
 				i++;
 				while (i < sentenceTokens.length && j < termTokens.length) {
-					if (sentenceTokens[i].equals(termTokens[j]))
+					if (sentenceTokens[i].equals(termTokens[j])){
+//						if(termNbr == 1)
+//							sentenceTokens[i]="Terme1";
+//						else
+//							sentenceTokens[i]="Terme2";
 						endIndex++;
+					}
 					i++;
 					j++;
 				}

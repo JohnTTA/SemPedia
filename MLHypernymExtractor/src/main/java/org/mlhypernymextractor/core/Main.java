@@ -2,17 +2,15 @@ package org.mlhypernymextractor.core;
 
 import gate.util.GateException;
 import gate.util.Out;
-import it.uniroma1.lcl.jlt.util.Files;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.ObjectOutputStream;
 import java.io.Writer;
+import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -46,14 +44,14 @@ public class Main {
 	// final static Logger logger = Logger.getLogger(Main.class);
 	public static boolean ttgAllSentences = false;
 	public static boolean withFeatures = false;
-	public static final int windowLength = 3;
+	public static final int windowLength = 5;
 	// les constantes
 	public static final int POSITIF = 1;
 	public static final int NEGATIF = 0;
 	public static final int OTHER = 2;
 
 	/**
-	 * @param args
+	 * @param args 
 	 * @throws IOException
 	 * @throws URISyntaxException
 	 * @throws GateException
@@ -64,6 +62,23 @@ public class Main {
 		// -Dgate.home="C:\Users\ghamnia\gate-8.1-build5169-BIN"
 		// -Xmx1024m
 
+		if(args[0].equals("-parse-combination")){
+			multipleTermsCombination =true;
+			parseCombination(args);
+			return;
+		}
+		else if(args[0].equals("-features")){
+			File corpusFolder = new File((String) args[1]);
+			corpusFolderURL = corpusFolder.toPath().toString();
+			xmlResultsFolderURL = corpusFolderURL + "/results";
+			pairsOfTermsFileFolderURL = corpusFolderURL + "/pairs_of_terms";
+			new File(pairsOfTermsFileFolderURL).mkdir();
+			
+			File f = corpusFolder.listFiles()[0];
+			GateResultFile gt = createExamplesFromBebelNetResultFile(f);
+			gt.createTrainingSetFile();
+			return;
+		}
 		if (args.length == 4) {
 			if (args[0].equals("-generate-multiple-term-combination")) {
 				multipleTermsCombination = true;
@@ -77,7 +92,11 @@ public class Main {
 //				System.out.println(termsListDefFolderURL);
 				xmlResultsFolderURL = corpusFolderURL + "/results";
 				pairsOfTermsFileFolderURL = corpusFolderURL + "/pairs_of_terms";
+				new File(pairsOfTermsFileFolderURL).mkdir();
 				withFeatures  = true;
+				GateResultFile grFile = createPairsFromPairsFile(corpusFolder.listFiles()[0]);
+				return;
+				
 			}
 		} else if (args.length == 3) {
 			if (((String) args[0]).equals("-ttg-examples")) {
@@ -104,7 +123,8 @@ public class Main {
 				termsListDefFolderURL = termsListDefFolder.toPath().toString();
 				xmlResultsFolderURL = corpusFolderURL + "/results";
 				pairsOfTermsFileFolderURL = corpusFolderURL + "/pairs_of_terms";
-				return;
+				Main.withFeatures = true;
+				Main.multipleTermsCombination = true;
 			}
 		} else if (args.length == 2) {
 			for (int i = 0; i < args.length; i++) {
@@ -205,45 +225,48 @@ public class Main {
 
 		// Parser les fichiers de r�sultats xml Gate
 		for (File out : new File(xmlResultsFolderURL).listFiles()) {
-			if (out.getName().contains(".xml")) {
+			if (out.getName().endsWith(".xml")) {
 				// parser le fichier xml
 				GateResultFile f = new GateResultFile(out.toURI().toURL());
 				Out.prln("parsing Gate XML file : "
 						+ f.getGateResultFileURL().toURI().getPath());
 				try {
 					f.parse();
-//					parseGateXml(out, f.getSentences());
-					
 				} catch (Exception e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 				Out.prln("Gate XML file parsed"
 						+ f.getGateResultFileURL().toURI().getPath());
-				int nbTerm = 0;
-				Out.prln("extracting pairs of terms");
-				for (Sentence s : f.getSentences()) {
-					nbTerm += s.getTerms().size();
-				}
-				Out.prln(nbTerm + " terms extracted from "
-						+ f.getGateResultFileURL().toURI().getPath());
 				gateResultFiles.add(f);
 			}
 		}
+	}
 
-		// Pour chaque fichier de r�sultat
-		// 1 -extraire des paires de termes � partir d'une m�me phrase
-		// 2 -valider avec babelnet
-		for (GateResultFile gateResultFile : gateResultFiles) {
-			gateResultFile.extractPairs(multipleTermsCombination);
-			Out.prln("Pairs of terms generated from "
-					+ gateResultFile.getGateResultFileURL().toURI().getPath());
-//			gateResultFile.printPairsOfTerms();
-			Out.prln("Saving pairs of terms");
-			gateResultFile.savePairsInFile();
-			gateResultFile.calculatePairFrequency();
+	private static void parseCombination(String[] args) throws MalformedURLException, URISyntaxException {
+		File corpusFolder = new File((String) args[1]);
+		corpusFolderURL = corpusFolder.toPath().toString();
+		File ANNIE_HOME_FOLDER = new File((String) args[2]);
+		ANNIE_HOME = ANNIE_HOME_FOLDER.toPath().toString();
+		xmlResultsFolderURL = corpusFolderURL + "/results";
+		pairsOfTermsFileFolderURL = corpusFolderURL + "/pairs_of_terms";
+		Main.withFeatures = true;
+		Main.multipleTermsCombination = true;
+		
+		for (File out : new File(corpusFolderURL).listFiles()) {
+			if (out.getName().endsWith(".xml")) {
+				// parser le fichier xml
+				GateResultFile f = new GateResultFile(out.toURI().toURL());
+				Out.prln("parsing Gate XML file : "
+						+ f.getGateResultFileURL().toURI().getPath());
+				try {
+					f.parse();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+				Out.prln("Gate XML file parsed"
+						+ f.getGateResultFileURL().toURI().getPath());
+			}
 		}
-
 	}
 
 	/*
@@ -274,8 +297,8 @@ public class Main {
 			Sentence sentence;
 			if (terms[0] != null && terms[1] != null && typeChar != null
 					&& sentenceString != null) {
-				term1 = new Term(-1, -1, terms[0], false);
-				term2 = new Term(-1, -1, terms[1], false);
+				term1 = new Term(-1, -1, terms[0],-1, false);
+				term2 = new Term(-1, -1, terms[1], -1,false);
 				sentence = new Sentence(-1, -1, -1, sentenceString);
 				sentence.addTerm(term1);
 				sentence.addTerm(term2);
@@ -319,20 +342,39 @@ public class Main {
 	public static GateResultFile createPairsFromPairsFile(File pairsFile)
 			throws IOException {
 		GateResultFile res = new GateResultFile(pairsFile.toURI().toURL());
-		BufferedReader in = new BufferedReader(new InputStreamReader(
-				new FileInputStream(pairsFile), "UTF8"));
+		BufferedReader in = UsefulMethods.openUTF8BufferedReader(pairsFile);
 		String str;
+		Writer featuresWriter = null;
+		if(withFeatures){
+			File featuresFile = new File(Main.pairsOfTermsFileFolderURL+"/features.txt");
+			try {
+				featuresFile.createNewFile();
+				featuresWriter = UsefulMethods.openUTF8OutputWriter(featuresFile);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		
 		while ((str = in.readLine()) != null) {
 			String[] line = str.split("\t", 3);
 			Term term1, term2;
 			Sentence sentence;
 			if (line[0] != null && line[1] != null && line[2] != null) {
-				term1 = new Term(-1, -1, line[0], false);
-				term2 = new Term(-1, -1, line[1], false);
+				term1 = new Term(-1, -1, line[0], -1,false);
+				term2 = new Term(-1, -1, line[1], -1,false);
 				sentence = new Sentence(-1, -1, -1, line[2]);
 				sentence.addTerm(term1);
 				sentence.addTerm(term2);
 				Pair p = new Pair(term1, term2);
+				if(withFeatures){
+					p.createFeatures();
+					try {
+						featuresWriter.append(p.getFeatures().toString());
+						featuresWriter.append("\n");
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
 				res.addSentence(sentence);
 				res.addPair(p);
 			}
@@ -343,7 +385,8 @@ public class Main {
 					+ p.getSentence().getValue());
 
 		}
-		in.close();
+		UsefulMethods.closeUTF8BufferedReader(in);
+		UsefulMethods.closeUTF8OutputWriter(featuresWriter);
 		return res;
 	}
 

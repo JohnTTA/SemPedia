@@ -5,12 +5,14 @@ public class Term extends Annotation {
 	 * 
 	 */
 	private static final long serialVersionUID = -4884850656474212269L;
+	private int id;
 	private String value;
 	private Sentence sentence;
 	private boolean isMotVide = false;
 
-	public Term(int a, int b, String value, boolean motVide) {
+	public Term(int a, int b, String value, int id, boolean motVide) {
 		super(a, b);
+		this.id = id;
 		super.isSentence = false;
 		this.value = value;
 		this.isMotVide = motVide;
@@ -48,6 +50,10 @@ public class Term extends Annotation {
 	@Override
 	public String toString(){
 		return this.value;
+	}
+
+	public int getId() {
+		return this.id;
 	}
 
 }
